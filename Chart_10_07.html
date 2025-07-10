@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +10,8 @@
     <script src="https://code.highcharts.com/modules/export-data.js"></script>
     <script src="https://code.highcharts.com/modules/accessibility.js"></script>
     <script src="https://www.unpkg.com/@eohjsc/era-widget@1.0.14/src/index.js"></script>
-    //<link rel="stylesheet" href="https://code.highcharts.com/css/highcharts.css">
+    //
+    <link rel="stylesheet" href="https://code.highcharts.com/css/highcharts.css">
     <style>
         .highcharts-figure,
         .highcharts-data-table table {
@@ -81,68 +83,72 @@
         }
     </style>
 </head>
+
 <body>
     <figure class="highcharts-figure">
         <div id="container"></div>
         <p class="highcharts-description">
-            Chart showing sensor1s data updating every second.
+            Chart sẽ xuất giá trị mỗi 2 giây
         </p>
-        <button id="exportButton">Export to Excel</button>
+        <button id="exportButton">Xuất File Excel</button>
     </figure>
 
-    <input type="checkbox" id="sensor1"></input>
+    <input type="checkbox" id="height"></input>
+    <!-- ✅ BỔ SUNG VÀO TRONG <script> CỦA BẠN -->
     <script>
-        // Era Widget initialization
         const eraWidget = new EraWidget();
         let config = null;
-        let sensor1Value = 0; // Khởi tạo giá trị giá trị mặc định
+        let config_sp = null; // <-- thêm biến cấu hình Setpoint
+
+        let sensor1Value = 0;
+        let setpoint = 0; // <-- giá trị setpoint động
         const dataBuffer = [];
+        const setpointBuffer = [];
 
         eraWidget.onConfiguration((configuration) => {
-            config = configuration.realtime_configs[0];
+            config = configuration.realtime_configs[0];      // sensor1
+            config_sp = configuration.realtime_configs[1];   // setpoint
         });
 
         eraWidget.onValues((values) => {
             const input = document.getElementById('sensor1');
-            sensor1Value = values[config.id].value; // Giả sử values[config.id].value là giá trị thực tế
-            input.checked = values[config.id].value > 0; // Đặt trạng thái của checkbox dựa trên giá trị
+            sensor1Value = values[config.id].value;
+            setpoint = values[config_sp.id].value;
+            input.checked = sensor1Value > 0;
         });
 
         eraWidget.ready();
 
-        // Existing Highcharts code
         const onChartLoad = function () {
-            const chart = this,
-                series = chart.series[0];
+            const chart = this;
+            const series_sensor = chart.series[0];
+            const series_sp = chart.series[1];
 
             setInterval(function () {
-                const x = (new Date()).getTime(), // thời gian hiện tại
-                    y = sensor1Value; // Giá trị giá trị thực tế
+                const x = (new Date()).getTime();
+                const y_sensor = sensor1Value;
+                const y_sp = setpoint;
 
-                series.addPoint([x, y], true, true);
-                dataBuffer.push([x, y]);
+                // Thêm điểm mới
+                series_sensor.addPoint([x, y_sensor], true, true);
+                series_sp.addPoint([x, y_sp], true, true);
 
-                // Giới hạn bộ đệm dữ liệu trong 30 phút (1800 giây)
+                // Cập nhật dữ liệu cho export
+                dataBuffer.push({ time: x, sensor1: y_sensor, sp: y_sp });
+
                 const thirtyMinutesAgo = x - 1800 * 1000;
-                while (dataBuffer.length > 0 && dataBuffer[0][0] < thirtyMinutesAgo) {
+                while (dataBuffer.length > 0 && dataBuffer[0].time < thirtyMinutesAgo) {
                     dataBuffer.shift();
                 }
             }, 1000);
         };
 
-        // Create the initial data
-        const data = (function () {
-            const data = [];
-            const time = (new Date().getTime());
-
-            for (let i = -19; i <= 0; i += 1) {
-                data.push({
-                    x: time + i * 1000,
-                    y: 0 // Giá trị mặc định cho dữ liệu ban đầu
-                });
-            }
-            return data;
-        }());
+        const timeNow = (new Date()).getTime();
+        const data = [];
+        for (let i = -19; i <= 0; i += 1) {
+            const x = timeNow + i * 2000;
+            data.push({ x: x, y: 0 }); // Giá trị mặc định ban đầu
+        }
 
         Highcharts.chart('container', {
             chart: {
@@ -151,96 +157,81 @@
                     load: onChartLoad
                 }
             },
-
             time: {
                 useUTC: false
             },
-
             title: {
-                text: 'Live sensor1 Data'
+                text: 'Đồ Thị Đáp Ứng PID'
             },
-
-            accessibility: {
-                announceNewData: {
-                    enabled: true,
-                    minAnnounceInterval: 15000,
-                    announcementFormatter: function (allSeries, newSeries, newPoint) {
-                        if (newPoint) {
-                            return 'New point added. Value: ' + newPoint.y;
-                        }
-                        return false;
-                    }
-                }
-            },
-
             xAxis: {
-                type: 'datetime', // Trục X là thời gian thực
+                type: 'datetime',
                 tickPixelInterval: 150,
                 maxPadding: 0.1
             },
-
             yAxis: {
                 title: {
                     text: 'sensor1'
                 },
-                min: 0, // Giá trị tối thiểu của trục Y
-                max: 130, // Giá trị tối đa của trục Y
-                tickInterval: 10, // Khoảng cách giữa các dấu vạch trên trục Y
-                plotLines: [
-                    {
-                        value: 0,
-                        width: 1,
-                        color: '#808080'
-                    }
-                ]
+                min: 0,
+                max: 100,
+                tickInterval: 10,
+                plotLines: [{
+                    value: 0,
+                    width: 1,
+                    color: '#808080'
+                }]
             },
-
             tooltip: {
-                headerFormat: '<b>{series.name}</b><br/>',
-                pointFormat: '{point.x:%Y-%m-%d %H:%M:%S}<br/>{point.y:.2f}'
+                shared: true,
+                headerFormat: '<b>{point.x:%Y-%m-%d %H:%M:%S}</b><br/>',
+                pointFormat: '{series.name}: {point.y:.2f}<br/>'
             },
-
             legend: {
-                enabled: false
+                enabled: true
             },
-
             exporting: {
                 enabled: false
             },
-
             series: [
                 {
-                    name: 'sensor1s',
+                    name: 'Sensor1',
                     lineWidth: 2,
                     color: Highcharts.getOptions().colors[6],
-                    data,
+                    data: data,
                     fillColor: {
-                        linearGradient: {
-                            x1: 0,
-                            x2: 0,
-                            y1: 0,
-                            y2: 1
-                        },
+                        linearGradient: { x1: 0, x2: 0, y1: 0, y2: 1 },
                         stops: [
                             [0, Highcharts.getOptions().colors[6]],
                             [1, Highcharts.color(Highcharts.getOptions().colors[6]).setOpacity(0).get('rgba')]
                         ]
                     }
-                } 
+                },
+                {
+                    name: 'Setpoint',
+                    type: 'line',
+                    data: data.map(d => [d.x, 0]),
+                    color: 'red',
+                    dashStyle: 'Dash',
+                    marker: { enabled: false },
+                    enableMouseTracking: false
+                }
             ]
         });
 
         document.getElementById('exportButton').addEventListener('click', function () {
             const ws = XLSX.utils.json_to_sheet(dataBuffer.map(point => ({
-                Time: (new Date(point[0])).toLocaleString(),
-                sensor1: point[1]
+                Time: (new Date(point.time)).toLocaleString(),
+                sensor1: point.sensor1,
+                Setpoint: point.sp
             })));
 
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'sensor1s');
+            XLSX.utils.book_append_sheet(wb, ws, 'Sensor1_Data');
             XLSX.writeFile(wb, 'sensor1_data.xlsx');
         });
     </script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
 </body>
+
 </html>
